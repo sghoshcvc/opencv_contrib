@@ -657,10 +657,11 @@ CV_EXPORTS_W Ptr<OCRBeamSearchDecoder::ClassifierCallback> loadOCRBeamSearchClas
 
 
 //Classifiers should provide diferent backends
-//For the moment only caffe is implemeted
+
 enum{
-    OCR_HOLISTIC_BACKEND_NONE,
-    OCR_HOLISTIC_BACKEND_CAFFE
+    OCR_HOLISTIC_BACKEND_NONE, //No back end
+    OCR_HOLISTIC_BACKEND_DNNMODERN, // tiny dnn backend opencv_dnn_modern
+    OCR_HOLISTIC_BACKEND_CAFFE // caffe based backend
 };
 
 class TextImageClassifier;

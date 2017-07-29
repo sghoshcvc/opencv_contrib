@@ -21,6 +21,10 @@
 #include "caffe/caffe.hpp"
 #endif
 
+#ifdef HAVE_DNN2
+#include <opencv2/dnn_modern.hpp>
+#endif
+
 namespace cv { namespace text {
 
 //Maybe OpenCV has a routine better suited
@@ -579,6 +583,181 @@ public:
     }
 };
 
+class DeepCNNtinyDNNImpl: public DeepCNN{
+protected:
+    void classifyMiniBatch(Mat inputImage, Mat outputMat)
+    {
+        //Classifies a list of images containing at most minibatchSz_ images
+        //CV_Assert(int(inputImageList.size()));
+        CV_Assert(outputMat.isContinuous());
+        //if (inputImage.channels() != this->inputChannelCount_)
+          //  CV_WARN("Number of input channel(s) in the model is not same as input");
+
+#ifdef HAVE_DNN2
+//        net_->input_blobs()[0]->Reshape(inputImageList.size(), this->channelCount_,this->inputGeometry_.height,this->inputGeometry_.width);
+//        net_->Reshape();
+//        float* inputBuffer=net_->input_blobs()[0]->mutable_cpu_data();
+//        float* inputData=inputBuffer;
+        std::vector<float_t> scores;
+        Mat preprocessed;
+        this->preprocess(inputImage,preprocessed);
+                    //split(preprocessed, input_channels); // color channel splitting is done in preprocess function of DNN_MODERN
+        this->net_->eval(preprocessed,scores)
+        float*outputMatData=(float*)(outputMat.data);
+        memcpy(outputMatData,scores,sizeof(float)*scores.size());
+
+
+//        for(size_t imgNum=0;imgNum<inputImageList.size();imgNum++)
+//        {
+//           // std::vector<Mat> input_channels;
+//            Mat preprocessed;
+//            // if the image have multiple color channels the input layer should be populated accordingly
+//            for (int channel=0;channel < this->channelCount_;channel++){
+
+//                cv::Mat netInputWraped(this->inputGeometry_.height, this->inputGeometry_.width, CV_32FC1, inputData);
+//                input_channels.push_back(netInputWraped);
+//                //input_data += width * height;
+//                inputData+=(this->inputGeometry_.height*this->inputGeometry_.width);
+//            }
+//            this->preprocess(inputImageList[imgNum],preprocessed);
+//            //split(preprocessed, input_channels); // color channel splitting is done in preprocess function of DNN_MODERN
+//            this->net_->eval(preprocessed,scores)
+
+//        }
+//        this->net_->ForwardPrefilled();
+//        const float* outputNetData=net_->output_blobs()[0]->cpu_data();
+//        this->outputGeometry_ = Size(net_->output_blobs()[0]->width(),net_->output_blobs()[0]->height());
+//        int outputSz = this->outputSize_ * this->outputGeometry_.height * this->outputGeometry_.width;
+
+//        //outputMat.resize(this->outputGeometry_.height * this->outputGeometry_.width);
+//        float*outputMatData=(float*)(outputMat.data);
+//        memcpy(outputMatData,outputNetData,sizeof(float)*outputSz*inputImageList.size());
+
+#endif
+    }
+
+#ifdef HAVE_DNN2
+    Ptr<caffeconverter > net_;
+#endif
+    //Size inputGeometry_;
+    int minibatchSz_;//The existence of the assignment operator mandates this to be nonconst
+    int outputSize_;
+public:
+    DeepCNNTinyDNNImpl(const DeepCNNTinyDNNImpl& dn):
+        minibatchSz_(dn.minibatchSz_),outputSize_(dn.outputSize_){
+        channelCount_=dn.channelCount_;
+        inputGeometry_=dn.inputGeometry_;
+        //Implemented to supress Visual Studio warning "assignment operator could not be generated"
+#ifdef HAVE_DNN2
+        this->net_=dn.net_;
+#endif
+    }
+    DeepCNNTinyDNNImpl& operator=(const DeepCNNTinyDNNImpl &dn)
+    {
+#ifdef HAVE_DNN2
+        this->net_=dn.net_;
+#endif
+        this->setPreprocessor(dn.preprocessor_);
+        this->inputGeometry_=dn.inputGeometry_;
+        this->channelCount_=dn.channelCount_;
+        this->minibatchSz_=dn.minibatchSz_;
+        this->outputSize_=dn.outputSize_;
+        this->preprocessor_=dn.preprocessor_;
+        this->outputGeometry_=dn.outputGeometry_;
+        return *this;
+        //Implemented to supress Visual Studio warning "assignment operator could not be generated"
+    }
+
+    DeepCNNTinyDNNImpl(String modelArchFilename, String modelWeightsFilename,Ptr<ImagePreprocessor> preprocessor, int maxMinibatchSz)
+        :minibatchSz_(maxMinibatchSz)
+    {
+
+        CV_Assert(this->minibatchSz_>0);
+        CV_Assert(fileExists(modelArchFilename));
+        CV_Assert(fileExists(modelWeightsFilename));
+        CV_Assert(!preprocessor.empty());
+        this->setPreprocessor(preprocessor);
+#ifdef HAVE_DNN2
+        this->net_.reset(new caffe::Net<float>(modelArchFilename, caffe::TEST));
+        this->net_=CaffeConverter::create(
+            modelArchFilename, modelWeightsFilename, mean_file));
+//        CV_Assert(net_->num_inputs()==1);
+//        CV_Assert(net_->num_outputs()==1);
+//        CV_Assert(this->net_->input_blobs()[0]->channels()==1
+//                ||this->net_->input_blobs()[0]->channels()==3);
+//        this->channelCount_=this->net_->input_blobs()[0]->channels();
+
+
+
+//        //this->net_->CopyTrainedLayersFrom(modelWeightsFilename);
+
+//        caffe::Blob<float>* inputLayer = this->net_->input_blobs()[0];
+
+//        this->inputGeometry_=Size(inputLayer->width(), inputLayer->height());
+//        this->channelCount_ = inputLayer->channels();
+
+//        inputLayer->Reshape(this->minibatchSz_,this->channelCount_,this->inputGeometry_.height, this->inputGeometry_.width);
+//        net_->Reshape();
+//        this->outputSize_=net_->output_blobs()[0]->channels();
+//        this->outputGeometry_ = Size(net_->output_blobs()[0]->width(),net_->output_blobs()[0]->height());
+
+
+
+
+
+#else
+        CV_Error(Error::StsError,"DNN-Modern not available during compilation!");
+#endif
+    }
+
+    void classify(InputArray image, OutputArray classProbabilities)
+    {
+        std::vector<Mat> inputImageList;
+        inputImageList.push_back(image.getMat());
+        classifyBatch(inputImageList,classProbabilities);
+    }
+
+    void classifyBatch(InputArrayOfArrays inputImageList, OutputArray classProbabilities)
+    {
+        std::vector<Mat> allImageVector;
+        inputImageList.getMatVector(allImageVector);
+        size_t outputSize=size_t(this->outputSize_);//temporary variable to avoid int to size_t arithmentic
+
+        size_t minibatchSize=size_t(this->minibatchSz_);//temporary variable to avoid int to size_t arithmentic
+        classProbabilities.create(Size(int(outputSize),int(allImageVector.size())),CV_32F);
+        Mat outputMat = classProbabilities.getMat();
+        for(size_t imgNum=0;imgNum<allImageVector.size();imgNum+=minibatchSize)
+        {
+            size_t rangeEnd=imgNum+std::min<size_t>(allImageVector.size()-imgNum,minibatchSize);
+            std::vector<Mat>::const_iterator from=std::vector<Mat>::const_iterator(allImageVector.begin()+imgNum);
+            std::vector<Mat>::const_iterator to=std::vector<Mat>::const_iterator(allImageVector.begin()+rangeEnd);
+            std::vector<Mat> minibatchInput(from,to);
+            classifyMiniBatch(minibatchInput,outputMat.rowRange(int(imgNum),int(rangeEnd)));
+
+        }
+
+    }
+
+    int getOutputSize()
+    {
+        return this->outputSize_;
+    }
+    Size getOutputGeometry()
+    {
+        return this->outputGeometry_;
+    }
+
+    int getMinibatchSize()
+    {
+        return this->minibatchSz_;
+    }
+
+    int getBackend()
+    {
+        return OCR_HOLISTIC_BACKEND_DNNMODERN;
+    }
+};
+
 
 Ptr<DeepCNN> DeepCNN::create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int minibatchSz,int backEnd)
 {
@@ -605,6 +784,9 @@ Ptr<DeepCNN> DeepCNN::createDictNet(String archFilename,String weightsFilename,i
     switch(backEnd){
     case OCR_HOLISTIC_BACKEND_CAFFE:
         return Ptr<DeepCNN>(new DeepCNNCaffeImpl(archFilename, weightsFilename,preprocessor, 100));
+        break;
+    case OCR_HOLISTIC_BACKEND_DNNMODERN:
+        return Ptr<DeepCNN>(new DeepCNNTinyDNNImpl(archFilename, weightsFilename,preprocessor, 100));
         break;
     case OCR_HOLISTIC_BACKEND_NONE:
     default:
