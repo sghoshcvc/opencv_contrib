@@ -661,9 +661,16 @@ CV_EXPORTS_W Ptr<OCRBeamSearchDecoder::ClassifierCallback> loadOCRBeamSearchClas
 enum{
     OCR_HOLISTIC_BACKEND_NONE, //No back end
     OCR_HOLISTIC_BACKEND_DNNMODERN, // tiny dnn backend opencv_dnn_modern
-    OCR_HOLISTIC_BACKEND_CAFFE // caffe based backend
+    OCR_HOLISTIC_BACKEND_CAFFE, // caffe based backend
+    OCR_HOLISTIC_BACKEND_DEFAULT // to store default value based on environment
 };
-
+//#ifdef HAVE_CAFEE
+//OCR_HOLISTIC_DEFAULT_BACKEND = OCR_HOLISTIC_BACKEND_CAFFE;
+//#elif defined(HAVE_DNN_MODERN)
+//OCR_HOLISTIC_DEFAULT_BACKEND = OCR_HOLISTIC_BACKEND_DNNMODERN;
+//#else
+//OCR_HOLISTIC_DEFAULT_BACKEND = OCR_HOLISTIC_BACKEND_NONE;
+//#endif
 class TextImageClassifier;
 
 /**
@@ -832,7 +839,10 @@ public:
      * @param backEnd integer parameter selecting the coputation framework. For now OCR_HOLISTIC_BACKEND_CAFFE is
      * the only option
      */
-    CV_WRAP static Ptr<DeepCNN> create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int minibatchSz=100,int backEnd=OCR_HOLISTIC_BACKEND_CAFFE);
+
+    CV_WRAP static Ptr<DeepCNN> create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int backEnd=OCR_HOLISTIC_BACKEND_DEFAULT,int minibatchSz=100);
+
+    //CV_WRAP static Ptr<DeepCNN> create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int minibatchSz=100);
 
     /** @brief Constructs a DeepCNN intended to be used for word spotting.
      *
@@ -854,7 +864,10 @@ public:
      * @param backEnd integer parameter selecting the coputation framework. For now OCR_HOLISTIC_BACKEND_CAFFE is
      * the only option
      */
-    CV_WRAP static Ptr<DeepCNN> createDictNet(String archFilename,String weightsFilename,int backEnd=OCR_HOLISTIC_BACKEND_CAFFE);
+    CV_WRAP static Ptr<DeepCNN> createDictNet(String archFilename,String weightsFilename,int backEnd=OCR_HOLISTIC_BACKEND_DEFAULT);
+
+    //CV_WRAP static Ptr<DeepCNN> createDictNet(String archFilename,String weightsFilename);
+
 
 };
 
@@ -893,6 +906,7 @@ CV_EXPORTS_W void setCaffeGpuMode(bool useGpu);
  * false if Caffe was unavailable.
  */
 CV_EXPORTS_W bool getCaffeAvailable();
+CV_EXPORTS_W bool getDNNModernAvailable();
 
 }//caffe
 }//cnn_config

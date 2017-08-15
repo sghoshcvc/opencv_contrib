@@ -21,9 +21,10 @@
 #include "caffe/caffe.hpp"
 #endif
 
-#ifdef HAVE_DNN2
+#ifdef HAVE_DNN_MODERN
 #include <opencv2/dnn_modern.hpp>
 #endif
+using namespace cv::dnn2;
 
 namespace cv { namespace text {
 
@@ -583,28 +584,29 @@ public:
     }
 };
 
-class DeepCNNtinyDNNImpl: public DeepCNN{
+class DeepCNNTinyDNNImpl: public DeepCNN{
 protected:
-    void classifyMiniBatch(Mat inputImage, Mat outputMat)
+    void classifyMiniBatch(std::vector<Mat> inputImage, Mat outputMat)
     {
         //Classifies a list of images containing at most minibatchSz_ images
         //CV_Assert(int(inputImageList.size()));
         CV_Assert(outputMat.isContinuous());
+        CV_Assert(inputImage.size() ==1);
         //if (inputImage.channels() != this->inputChannelCount_)
           //  CV_WARN("Number of input channel(s) in the model is not same as input");
 
-#ifdef HAVE_DNN2
+#ifdef HAVE_DNN_MODERN
 //        net_->input_blobs()[0]->Reshape(inputImageList.size(), this->channelCount_,this->inputGeometry_.height,this->inputGeometry_.width);
 //        net_->Reshape();
 //        float* inputBuffer=net_->input_blobs()[0]->mutable_cpu_data();
 //        float* inputData=inputBuffer;
         std::vector<float_t> scores;
         Mat preprocessed;
-        this->preprocess(inputImage,preprocessed);
+        this->preprocess(inputImage[0],preprocessed);
                     //split(preprocessed, input_channels); // color channel splitting is done in preprocess function of DNN_MODERN
-        this->net_->eval(preprocessed,scores)
+        this->net_->eval(preprocessed,scores);
         float*outputMatData=(float*)(outputMat.data);
-        memcpy(outputMatData,scores,sizeof(float)*scores.size());
+        memcpy(outputMatData,scores.data(),sizeof(float)*scores.size());
 
 
 //        for(size_t imgNum=0;imgNum<inputImageList.size();imgNum++)
@@ -636,8 +638,8 @@ protected:
 #endif
     }
 
-#ifdef HAVE_DNN2
-    Ptr<caffeconverter > net_;
+#ifdef HAVE_DNN_MODERN
+    Ptr<CaffeConverter > net_;
 #endif
     //Size inputGeometry_;
     int minibatchSz_;//The existence of the assignment operator mandates this to be nonconst
@@ -648,13 +650,13 @@ public:
         channelCount_=dn.channelCount_;
         inputGeometry_=dn.inputGeometry_;
         //Implemented to supress Visual Studio warning "assignment operator could not be generated"
-#ifdef HAVE_DNN2
+#ifdef HAVE_DNN_MODERN
         this->net_=dn.net_;
 #endif
     }
     DeepCNNTinyDNNImpl& operator=(const DeepCNNTinyDNNImpl &dn)
     {
-#ifdef HAVE_DNN2
+#ifdef HAVE_DNN_MODERN
         this->net_=dn.net_;
 #endif
         this->setPreprocessor(dn.preprocessor_);
@@ -677,10 +679,10 @@ public:
         CV_Assert(fileExists(modelWeightsFilename));
         CV_Assert(!preprocessor.empty());
         this->setPreprocessor(preprocessor);
-#ifdef HAVE_DNN2
-        this->net_.reset(new caffe::Net<float>(modelArchFilename, caffe::TEST));
+#ifdef HAVE_DNN_MODERN
+        //this->net_.reset(new caffe::Net<float>(modelArchFilename, caffe::TEST));
         this->net_=CaffeConverter::create(
-            modelArchFilename, modelWeightsFilename, mean_file));
+            modelArchFilename, modelWeightsFilename);
 //        CV_Assert(net_->num_inputs()==1);
 //        CV_Assert(net_->num_outputs()==1);
 //        CV_Assert(this->net_->input_blobs()[0]->channels()==1
@@ -759,15 +761,29 @@ public:
 };
 
 
-Ptr<DeepCNN> DeepCNN::create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int minibatchSz,int backEnd)
+Ptr<DeepCNN> DeepCNN::create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int backEnd,int minibatchSz)
 {
     if(preprocessor.empty())
     {
         preprocessor=ImagePreprocessor::createResizer();
     }
     switch(backEnd){
+    case OCR_HOLISTIC_BACKEND_DEFAULT:
+           #ifdef HAVE_CAFFE
+            return Ptr<DeepCNN>(new DeepCNNCaffeImpl(archFilename, weightsFilename,preprocessor, minibatchSz));
+
+           #elif defined(HAVE_DNN_MODERN)
+            return Ptr<DeepCNN>(new DeepCNNTinyDNNImpl(archFilename, weightsFilename,preprocessor, minibatchSz));
+           #else
+            CV_Error(Error::StsError,"DeepCNN::create backend not implemented");
+            return Ptr<DeepCNN>();
+        #endif
+            break;
     case OCR_HOLISTIC_BACKEND_CAFFE:
         return Ptr<DeepCNN>(new DeepCNNCaffeImpl(archFilename, weightsFilename,preprocessor, minibatchSz));
+        break;
+    case OCR_HOLISTIC_BACKEND_DNNMODERN:
+        return Ptr<DeepCNN>(new DeepCNNTinyDNNImpl(archFilename, weightsFilename,preprocessor, minibatchSz));
         break;
     case OCR_HOLISTIC_BACKEND_NONE:
     default:
@@ -782,6 +798,18 @@ Ptr<DeepCNN> DeepCNN::createDictNet(String archFilename,String weightsFilename,i
 {
     Ptr<ImagePreprocessor> preprocessor=ImagePreprocessor::createImageStandarizer(113);
     switch(backEnd){
+    case OCR_HOLISTIC_BACKEND_DEFAULT:
+           #ifdef HAVE_CAFFE
+            return Ptr<DeepCNN>(new DeepCNNCaffeImpl(archFilename, weightsFilename,preprocessor, 100));
+
+           #elif defined(HAVE_DNN_MODERN)
+            return Ptr<DeepCNN>(new DeepCNNTinyDNNImpl(archFilename, weightsFilename,preprocessor, 100));
+           #else
+            CV_Error(Error::StsError,"DeepCNN::create backend not implemented");
+            return Ptr<DeepCNN>();
+        #endif
+            break;
+
     case OCR_HOLISTIC_BACKEND_CAFFE:
         return Ptr<DeepCNN>(new DeepCNNCaffeImpl(archFilename, weightsFilename,preprocessor, 100));
         break;
@@ -796,6 +824,27 @@ Ptr<DeepCNN> DeepCNN::createDictNet(String archFilename,String weightsFilename,i
     }
 }
 
+//Ptr<DeepCNN> DeepCNN::createDictNet(String archFilename,String weightsFilename)
+//{
+//   #ifdef HAVE_CAFFE
+//    return createDictNet(archFilename,weightsFilename,OCR_HOLISTIC_BACKEND_CAFFE);
+//   #elif defined(HAVE_DNN_MODERN)
+//    return  createDictNet(archFilename,weightsFilename,OCR_HOLISTIC_BACKEND_DNNMODERN);
+//   #else
+//    return createDictNet(archFilename,weightsFilename,OCR_HOLISTIC_BACKEND_NONE);
+//#endif
+//}
+
+//Ptr<DeepCNN> DeepCNN::create(String archFilename,String weightsFilename,Ptr<ImagePreprocessor> preprocessor,int minibatchSz)
+//{
+//   #ifdef HAVE_CAFFE
+//    return create(archFilename,weightsFilename,preprocessor,OCR_HOLISTIC_BACKEND_CAFFE,minibatchSz);
+//   #elif defined(HAVE_DNN_MODERN)
+//    return  create(archFilename,weightsFilename,preprocessor, OCR_HOLISTIC_BACKEND_DNNMODERN,minibatchSz);
+//   #else
+//    return create(archFilename,weightsFilename,preprocessor, OCR_HOLISTIC_BACKEND_NONE,minibatchSz);
+//#endif
+//}
 namespace cnn_config{
 namespace caffe_backend{
 
@@ -821,6 +870,27 @@ bool getCaffeAvailable()
 {
     return true;
 }
+#elif defined(HAVE_DNN_MODERN)
+
+bool getCaffeGpuMode()
+{
+    CV_Error(Error::StsError,"Caffe not available during compilation!");
+    return 0;
+}
+
+void setCaffeGpuMode(bool useGpu)
+{
+    CV_Error(Error::StsError,"Caffe not available during compilation!");
+    CV_Assert(useGpu==1);//Compilation directives force
+}
+
+bool getCaffeAvailable(){
+    return 0;
+}
+bool getDNNModernAvailable(){
+    return true;
+}
+
 
 #else
 
@@ -838,6 +908,10 @@ void setCaffeGpuMode(bool useGpu)
 
 bool getCaffeAvailable(){
     return 0;
+}
+bool getDNNModernAvailable(){
+   printf("no available");
+        return 0;
 }
 
 #endif

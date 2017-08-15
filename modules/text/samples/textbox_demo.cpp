@@ -58,11 +58,17 @@ void textbox_draw(cv::Mat &src, std::vector<cv::Rect>  &groups,std::vector<float
 
 int main(int argc, const char * argv[]){
     if(!cv::text::cnn_config::caffe_backend::getCaffeAvailable()){
-        std::cout<<"The text module was compiled without Caffe which is the only available DeepCNN backend.\nAborting!\n";
-        exit(1);
+      //  std::cout<<"The text module was compiled without Caffe which is the only available DeepCNN backend.\nAborting!\n";
+//        exit(1);
+        if(!cv::text::cnn_config::caffe_backend::getDNNModernAvailable()){
+              std::cout<<"The text module was compiled without Caffe and DNN Modern which are the only available DeepCNN backend.\nAborting!\n";
+              exit(1);
+        }
+
     }
     //set to true if you have a GPU with more than 3GB
-    cv::text::cnn_config::caffe_backend::setCaffeGpuMode(true);
+    if (cv::text::cnn_config::caffe_backend::getCaffeAvailable())
+        cv::text::cnn_config::caffe_backend::setCaffeGpuMode(true);
 
     if (argc < 3){
         std::cout<<getHelpStr(argv[0]);
